@@ -543,42 +543,16 @@ header h1 {
 <body>
 
 <!-- ══ LOGIN SCREEN ══ -->
-<div id="loginScreen">
-  <div class="login-logo">ML OFERTAS</div>
-  <div class="login-title">Bot Afiliado WhatsApp</div>
-  <div class="login-sub">Conecta tu cuenta de Mercado Libre para buscar las mejores ofertas del día</div>
-
-  <div class="login-steps">
-    <p>¿Cómo funciona?</p>
-    <div class="step">
-      <div class="step-num">1</div>
-      <span>Conectas tu cuenta ML (una sola vez)</span>
-    </div>
-    <div class="step">
-      <div class="step-num">2</div>
-      <span>La app busca productos con descuento</span>
-    </div>
-    <div class="step">
-      <div class="step-num">3</div>
-      <span>Copias el mensaje y lo pegas en WhatsApp</span>
-    </div>
-  </div>
-
-  <button class="btn-login" onclick="loginML()">
-    🔗 Conectar con Mercado Libre
-  </button>
-  <div class="login-note">Solo se usará para leer productos públicos. No se accede a tu cuenta, pagos ni datos personales.</div>
-</div>
+<div id="loginScreen" style="display:none"></div>
 
 <!-- ══ APP SCREEN ══ -->
 <div id="appScreen">
   <header>
     <div class="logo-box">ML</div>
     <h1>Ofertas Afiliado</h1>
-    <div class="user-chip" onclick="logout()">
+    <div class="user-chip">
       <div class="live-dot"></div>
-      <span id="userName">Conectado</span>
-      <span>✕</span>
+      <span>En vivo</span>
     </div>
   </header>
 
@@ -637,22 +611,8 @@ let lastQuery = 'smartphones celulares';
 
 // ══ INIT ══
 window.onload = () => {
-  // Check if returning from ML OAuth with code
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get('code');
-
-  if (code) {
-    // Clean URL
-    window.history.replaceState({}, document.title, window.location.pathname);
-    exchangeCode(code);
-    return;
-  }
-
-  if (accessToken && !isTokenExpired()) {
-    showApp();
-  } else {
-    showLogin();
-  }
+  // Skip login — go directly to app using CORS proxy
+  showApp();
 };
 
 function isTokenExpired() {
@@ -769,25 +729,9 @@ function showLogin() {
   document.getElementById('appScreen').style.display = 'none';
 }
 
-async function showApp() {
+function showApp() {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
-
-  // Load user info if we have a real token
-  if (accessToken && accessToken !== 'PUBLIC') {
-    try {
-      const res = await fetch('https://api.mercadolibre.com/users/me', {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
-      if (res.ok) {
-        const u = await res.json();
-        document.getElementById('userName').textContent = u.nickname || 'Conectado';
-      } else if (res.status === 401) {
-        document.getElementById('tokenBanner').style.display = 'flex';
-      }
-    } catch(e) {}
-  }
-
   fetchDeals(lastQuery);
 }
 
@@ -824,23 +768,12 @@ async function fetchDeals(query) {
   btn.disabled = true;
   statusEl.textContent = 'Buscando...';
 
-  const headers = {};
-  if (accessToken && accessToken !== 'PUBLIC') {
-    headers['Authorization'] = `Bearer ${accessToken}`;
-  }
 
   try {
-    // Search with discount filter
-    const url = `https://api.mercadolibre.com/sites/MLM/search?q=${encodeURIComponent(query)}&limit=50&sort=relevance`;
-    const res = await fetch(url, { headers });
-
-    if (res.status === 401) {
-      document.getElementById('tokenBanner').style.display = 'flex';
-      grid.innerHTML = `<div class="empty"><div class="empty-icon">🔑</div><p>Sesión expirada. Reconecta tu cuenta.</p></div>`;
-      btn.disabled = false;
-      return;
-    }
-
+    // CORS proxy bypasses ML browser block — no token needed
+    const mlUrl = `https://api.mercadolibre.com/sites/MLM/search?q=${encodeURIComponent(query)}&limit=50&sort=relevance`;
+    const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(mlUrl)}`;
+    const res = await fetch(proxyUrl);
     const data = await res.json();
     let all = data.results || [];
 
